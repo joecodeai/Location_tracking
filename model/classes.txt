@@ -1,0 +1,4 @@
+0: Shop signboard
+1: Trees
+2: Traffic sign
+3: Building
