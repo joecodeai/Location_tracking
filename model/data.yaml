@@ -1,0 +1,13 @@
+path: /home/mundax/Projects/Location_tracking/model/data
+train: images/train  
+val: images/val      
+
+nc: 3
+
+names: 
+  0: tree
+  1: shop signboard
+  2: traffic sign
+  # 3: Building
+
+# ['Sign board','Trees', 'Traffic signal', 'Building']
