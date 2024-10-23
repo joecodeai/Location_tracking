@@ -72,6 +72,22 @@ class DatabaseHandler:
             WHERE obj1_latitude IS NULL OR obj2_latitude IS NULL OR obj3_latitude IS NULL
         ''')
         return self.cursor.fetchall()
+    
+    def get_camera_angle(self, row_id):
+        """
+        Retrieves the camera angle for a specific image entry.
+
+        Parameters:
+            row_id (int): The primary key of the row to retrieve the angle from.
+
+        Returns:
+            float: The camera angle in degrees.
+        """
+        self.cursor.execute('''
+            SELECT angle_1 FROM location WHERE id = ?
+        ''', (row_id,))
+        result = self.cursor.fetchone()
+        return result[0] if result else None
 
     def update_object_coordinates(self, row_id, obj_latitude, obj_longitude, obj_number):
         """
@@ -149,6 +165,12 @@ def process_images_and_update_db(db_handler, image_comparator):
         if id1 in processed_ids:
             continue
 
+        # Retrieve the angle for the first camera
+        angle1 = db_handler.get_camera_angle(id1)
+        if angle1 is None:
+            print(f"Error: Camera angle not found for ID {id1}")
+            continue
+
         # Compare with every other entry
         for j in range(i + 1, len(entries)):
             id2, camera_id2, lat2, lon2 = entries[j]
@@ -159,6 +181,12 @@ def process_images_and_update_db(db_handler, image_comparator):
 
             # Only process if the camera IDs are different and both images are unprocessed
             if camera_id1 != camera_id2 and id2 in unprocessed_ids:
+                # Retrieve the angle for the second camera
+                angle2 = db_handler.get_camera_angle(id2)
+                if angle2 is None:
+                    print(f"Error: Camera angle not found for ID {id2}")
+                    continue
+
                 # Compare images
                 image_path1 = os.path.join("/home/mundax/Projects/Location_tracking/model/data/images/Matching/", f"{id1}.jpg")
                 image_path2 = os.path.join("/home/mundax/Projects/Location_tracking/model/data/images/Matching/", f"{id2}.jpg")
@@ -166,11 +194,8 @@ def process_images_and_update_db(db_handler, image_comparator):
                 if image_comparator.compare_images(image_path1, image_path2):
                     print(f"Images {id1} and {id2} are similar. Processing...")
 
-                    # Assume angle and detection logic (replace with actual data from database)
-                    angle1 = 45  # Example: Retrieve from database or detection logic
-                    angle2 = 90  # Example: Retrieve from database or detection logic
-
                     try:
+                        # Calculate the object coordinates using the retrieved angles
                         obj_latitude, obj_longitude = calculate_coordinates(lat1, lon1, lat2, lon2, angle1, angle2)
 
                         # Update object coordinates for both entries

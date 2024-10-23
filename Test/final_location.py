@@ -1,8 +1,9 @@
 import sqlite3
 import cv2
 import os
+import numpy as np
 from ultralytics import YOLO
-from math import radians, cos
+from math import radians, cos, sin, atan2, degrees, sqrt
 
 class ImageMatcher:
     def __init__(self, folder_path):
@@ -74,36 +75,63 @@ class ObjectDetector:
 class LocationCalculator:
     @staticmethod
     def calculate_bearing(camera_orientation, image_width, object_position):
-        """Calculate the bearing using the camera orientation and object position."""
-        camera_fov = 90
-        center_x = image_width / 2
-        distance_from_center = object_position - center_x
-        max_angle = camera_fov / 2
-        max_distance = image_width / 2
+        """Calculate the bearing using the camera orientation and object position in the image."""
+        camera_fov = 90  # Camera field of view (degrees)
+        center_x = image_width / 2  # Image center (assumed to be the center of the image)
+        distance_from_center = object_position - center_x  # Object's horizontal offset from image center
+        max_angle = camera_fov / 2  # Maximum angle the camera can capture
+        max_distance = image_width / 2  # Maximum pixel distance from center to edge
+
+        # Calculate the angle offset of the object relative to the camera's center
         angle_offset = (distance_from_center / max_distance) * max_angle
-        return camera_orientation + angle_offset
+        # The total bearing is the camera's orientation plus the offset
+        total_bearing = camera_orientation + angle_offset
+
+        return total_bearing
 
     @staticmethod
     def find_intersection(lat1, lon1, bearing1, lat2, lon2, bearing2):
-        """Calculate the intersection point of two bearings."""
+        """
+        Triangulate to find the intersection of two bearings (from two known points) on a plane.
+        
+        Parameters:
+            lat1, lon1 (float): Latitude and longitude of the first camera.
+            bearing1 (float): Bearing (angle) from the first camera.
+            lat2, lon2 (float): Latitude and longitude of the second camera.
+            bearing2 (float): Bearing (angle) from the second camera.
+
+        Returns:
+            tuple: Estimated location (latitude, longitude) of the camera.
+        """
+        # Convert degrees to radians
         lat1_rad = radians(lat1)
         lon1_rad = radians(lon1)
         lat2_rad = radians(lat2)
         lon2_rad = radians(lon2)
+        bearing1_rad = radians(bearing1)
+        bearing2_rad = radians(bearing2)
 
-        R = 6371  # Earth's radius in kilometers
-        distance = 100  # Assumed distance in kilometers
+        # Use the slope of the bearings to set up a system of equations
+        slope1 = np.tan(bearing1_rad)
+        slope2 = np.tan(bearing2_rad)
 
-        end_lat1 = lat1_rad + (distance / R) * cos(radians(bearing1))
-        end_lon1 = lon1_rad + (distance / R) * cos(radians(bearing1)) / cos(lat1_rad)
+        # The equations of the lines in slope-intercept form
+        intercept1 = lat1_rad - slope1 * lon1_rad
 
-        end_lat2 = lat2_rad + (distance / R) * cos(radians(bearing2))
-        end_lon2 = lon2_rad + (distance / R) * cos(radians(bearing2)) / cos(lat2_rad)
+        # For object 2
+        intercept2 = lat2_rad - slope2 * lon2_rad
 
-        intersection_lat = (lat1 + lat2) / 2
-        intersection_lon = (lon1 + lon2) / 2
+        # Set the two equations equal to find x (longitude)
+        x_long = (intercept2 - intercept1) / (slope1 - slope2)
 
-        return intersection_lat, intersection_lon
+        # Now substitute x back into one of the original equations to find y (latitude)
+        y_lat = slope1 * x_long + intercept1
+
+        # Convert back to degrees
+        lat_deg = degrees(y_lat)
+        lon_deg = degrees(x_long)
+
+        return lat_deg, lon_deg
 
 class LocationEstimator:
     def __init__(self, db_path, model_path, folder_path):
