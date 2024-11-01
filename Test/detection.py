@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import sqlite3
 from ultralytics import YOLO
+from gps import get_gps_data, capture_images, save_images
 
 class ObjectDetector:
     """
@@ -155,14 +156,46 @@ if __name__ == "__main__":
         db_path="/home/mundax/SQLite/My_Database.db"
     )
 
-    # Process one image
-    app.process_image(
-        image_path="/home/mundax/Projects/Location_tracking/model/data/images/Matching/7.jpg",
-        camera_id=1,
-        latitude=77.792354,
-        longitude=-89.414679,
-        camera_angle=45
-    )
+    # Get GPS data
+    latitude, longitude = get_gps_data()
+    if latitude is None or longitude is None:
+        print("Failed to retrieve GPS data.")
+    else:
+        # Capture images from both cameras
+        frame1, frame2 = capture_images(camera1_id=0, camera2_id=1)
+
+        if frame1 is not None and frame2 is not None:
+            # Save captured images and get their paths
+            img1_path, img2_path = save_images(frame1, frame2)
+
+            # Process images for both cameras
+            camera_data = [
+                {
+                    "image_path": img1_path,
+                    "camera_id": 1,
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "camera_angle": 45
+                },
+                {
+                    "image_path": img2_path,
+                    "camera_id": 2,
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "camera_angle": 90
+                }
+            ]
+
+            for data in camera_data:
+                app.process_image(
+                    image_path=data["image_path"],
+                    camera_id=data["camera_id"],
+                    latitude=data["latitude"],
+                    longitude=data["longitude"],
+                    camera_angle=data["camera_angle"]
+                )
+        else:
+            print("Could not capture images from cameras.")
 
     # Close the database connection
     app.close()

@@ -3,7 +3,7 @@ import cv2
 import os
 import numpy as np
 from ultralytics import YOLO
-from math import radians, cos, sin, atan2, degrees, sqrt
+from math import radians, degrees
 
 class ImageMatcher:
     def __init__(self, folder_path):
@@ -18,7 +18,7 @@ class ImageMatcher:
         
         keypoints1, descriptors1 = self.orb.detectAndCompute(new_img, None)
         best_match_file = None
-        max_matches = 0
+        max_matches = 1000
 
         for filename in os.listdir(self.folder_path):
             if filename.endswith(('.jpg', '.png', '.jpeg')):
@@ -77,7 +77,7 @@ class LocationCalculator:
     def calculate_bearing(camera_orientation, image_width, object_position):
         """Calculate the bearing using the camera orientation and object position in the image."""
         camera_fov = 90  # Camera field of view (degrees)
-        center_x = image_width / 2  # Image center (assumed to be the center of the image)
+        center_x = image_width / 2 
         distance_from_center = object_position - center_x  # Object's horizontal offset from image center
         max_angle = camera_fov / 2  # Maximum angle the camera can capture
         max_distance = image_width / 2  # Maximum pixel distance from center to edge
@@ -187,7 +187,6 @@ class LocationEstimator:
     def close(self):
         self.db_handler.close()
 
-# Example usage
 if __name__ == "__main__":
     db_path = '/home/mundax/SQLite/My_Database.db'
     model_path = '/home/mundax/Projects/Location_tracking/model/yolov11m_new_saved.pt'
