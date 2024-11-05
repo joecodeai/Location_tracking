@@ -2,8 +2,8 @@ import cv2
 import numpy as np
 import sqlite3
 from ultralytics import YOLO
-from gps import get_gps_data, capture_images, save_images
-
+from gps import get_gps_data, capture_images
+#, save_images
 class ObjectDetector:
     """
     Object detection class using the YOLO model.
@@ -28,11 +28,42 @@ class ObjectDetector:
         if img is None:
             raise FileNotFoundError(f"Image not found at {image_path}")
         
+        fixed_width = 1000
         height, width = img.shape[:2]
-        image_center_x = width / 2
+        aspect_ratio = height / width
+        fixed_height = int(fixed_width * aspect_ratio)
+
+        # If the fixed dimensions are smaller than the original, crop around the center
+        if fixed_width < width or fixed_height < height:
+            # Calculate the center of the original image
+            center_x, center_y = width // 2, height // 2
+            
+            # Calculate the top-left corner of the crop (centered)
+            crop_x1 = max(center_x - fixed_width // 2, 0)
+            crop_y1 = max(center_y - fixed_height // 2, 0)
+
+            # Calculate the bottom-right corner of the crop (centered)
+            crop_x2 = min(center_x + fixed_width // 2, width)
+            crop_y2 = min(center_y + fixed_height // 2, height)
+
+            # Crop the image centered around the middle
+            cropped_img = img[crop_y1:crop_y2, crop_x1:crop_x2]
+        else:
+            # If fixed dimensions are larger, we need to pad the image
+            pad_height = fixed_height - height
+            pad_width = fixed_width - width
+            # Apply mirror padding to the image using cv2.copyMakeBorder
+            cropped_img = cv2.copyMakeBorder(
+                img, 
+                pad_height // 2, pad_height // 2,  # Padding on top and bottom (split evenly)
+                pad_width // 2, pad_width // 2,    # Padding on left and right (split evenly)
+                cv2.BORDER_REPLICATE  # Mirror padding
+            )
+
+        image_center_x = fixed_width / 2
 
         # Run object detection inference
-        results = self.model(img)
+        results = self.model(cropped_img)
         obj_data = []
 
         # Process each detection result
@@ -41,15 +72,23 @@ class ObjectDetector:
             for box in boxes:
                 x1, y1, x2, y2 = box.xyxy[0].numpy()  # Bounding box coordinates
                 class_id = int(box.cls[0].item())  # Object class ID
+                
+                scale_x = fixed_width / width
+                scale_y = fixed_height / height
+                x1_resized = x1 * scale_x
+                y1_resized = y1 * scale_y
+                x2_resized = x2 * scale_x
+                y2_resized = y2 * scale_y
 
                 # Calculate bounding box center
-                center_x = (x1 + x2) / 2
-                center_y = (y1 + y2) / 2
+                center_x = (x1_resized + x2_resized) / 2
+                center_y = (y1_resized + y2_resized) / 2
 
                 # Calculate angle from the center of the image
                 distance_from_center = center_x - image_center_x
-                max_angle = 45  # Max horizontal field of view angle
-                max_distance = width / 2  # Max horizontal pixel distance from center
+                cropped_ratio = min(fixed_width / width, 1)
+                max_angle = (55/2) * cropped_ratio  # Max horizontal field of view angle
+                max_distance = fixed_width / 2  # Max horizontal pixel distance from center
                 angle = (distance_from_center / max_distance) * max_angle
 
                 # Adjust the angle with the camera angle and store object data
@@ -62,7 +101,7 @@ class DatabaseHandler:
     Handles interactions with the SQLite database for storing object detection data.
     """
     def __init__(self, db_path):
-        self.conn = sqlite3.connect(db_path)
+        self.conn = sqlite3.connect(db_path, timeout=2.0)
         self.cursor = self.conn.cursor()
 
     def insert_row(self, camera_id, latitude, longitude, detections):
@@ -80,9 +119,13 @@ class DatabaseHandler:
         """
         try:
             # Unpack up to 3 objects from the detection results
-            obj1_class, obj1_x, obj1_y, angle1 = detections[0] if len(detections) > 0 else (None, None, None, None)
-            obj2_class, obj2_x, obj2_y, angle2 = detections[1] if len(detections) > 1 else (None, None, None, None)
-            obj3_class, obj3_x, obj3_y, angle3 = detections[2] if len(detections) > 2 else (None, None, None, None)
+            latitude = float(latitude)
+            longitude = float(longitude)
+
+            # Ensure obj_class remains int and other fields are cast to float
+            obj1_class, obj1_x, obj1_y, angle1 = self.format_detection(detections, 0)
+            obj2_class, obj2_x, obj2_y, angle2 = self.format_detection(detections, 1)
+            obj3_class, obj3_x, obj3_y, angle3 = self.format_detection(detections, 2)
 
             # Insert the data into the database
             self.cursor.execute('''
@@ -106,6 +149,22 @@ class DatabaseHandler:
         except sqlite3.Error as e:
             print(f"Database error: {e}")
             return None
+
+    def format_detection(self, detections, index):
+        """
+        Formats the detection tuple with appropriate types:
+        obj_class as int and other values as float.
+        """
+        try:
+            detection = detections[index]
+            obj_class = int(detection[0]) if detection[0] is not None else None
+            obj_x = float(detection[1]) if detection[1] is not None else None
+            obj_y = float(detection[2]) if detection[2] is not None else None
+            angle = float(detection[3]) if detection[3] is not None else None
+            return obj_class, obj_x, obj_y, angle
+        except IndexError:
+            # Return None values if detection at the given index does not exist
+            return None, None, None, None
 
     def close(self):
         """Closes the SQLite database connection."""
@@ -152,8 +211,8 @@ class MainApp:
 if __name__ == "__main__":
     # Initialize the MainApp with the YOLO model path and database path
     app = MainApp(
-        model_path="/home/mundax/Projects/Location_tracking/model/yolov11m_new_saved.pt",
-        db_path="/home/mundax/SQLite/My_Database.db"
+        model_path=r"D:\Jupyter\Road_Object_Detection\yolov11m_new_saved.pt",
+        db_path=r"D:\Jupyter\Road_Object_Detection\SQLite\My_Database.db"
     )
 
     # Get GPS data
@@ -162,40 +221,34 @@ if __name__ == "__main__":
         print("Failed to retrieve GPS data.")
     else:
         # Capture images from both cameras
-        frame1, frame2 = capture_images(camera1_id=0, camera2_id=1)
+        img1_path, img2_path = capture_images(camera_index1=1, camera_index2=2)
 
-        if frame1 is not None and frame2 is not None:
-            # Save captured images and get their paths
-            img1_path, img2_path = save_images(frame1, frame2)
+        # Process images for both cameras
+        camera_data = [
+            {
+                "image_path": img1_path,
+                "camera_id": 1,
+                "latitude": latitude,
+                "longitude": longitude,
+                "camera_angle": 45
+            },
+            {
+                "image_path": img2_path,
+                "camera_id": 2,
+                "latitude": latitude,
+                "longitude": longitude,
+                "camera_angle": 90
+            }
+        ]
 
-            # Process images for both cameras
-            camera_data = [
-                {
-                    "image_path": img1_path,
-                    "camera_id": 1,
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "camera_angle": 45
-                },
-                {
-                    "image_path": img2_path,
-                    "camera_id": 2,
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "camera_angle": 90
-                }
-            ]
-
-            for data in camera_data:
-                app.process_image(
-                    image_path=data["image_path"],
-                    camera_id=data["camera_id"],
-                    latitude=data["latitude"],
-                    longitude=data["longitude"],
-                    camera_angle=data["camera_angle"]
-                )
-        else:
-            print("Could not capture images from cameras.")
+        for data in camera_data:
+            app.process_image(
+                image_path=data["image_path"],
+                camera_id=data["camera_id"],
+                latitude=data["latitude"],
+                longitude=data["longitude"],
+                camera_angle=data["camera_angle"]
+            )
 
     # Close the database connection
     app.close()

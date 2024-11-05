@@ -137,9 +137,9 @@ def calculate_coordinates(lat1, lon1, lat2, lon2, angle1, angle2):
     if slope1 != slope2:
         obj_longitude = (b2 - b1) / (slope1 - slope2)
         obj_latitude = slope1 * obj_longitude + b1
-        return obj_latitude, obj_longitude
+        return np.degrees(obj_latitude), np.degrees(obj_longitude)
     else:
-        raise ValueError("The angles result in parallel lines; cannot calculate coordinates.")
+        raise ValueError("The angles result in parallel lines. Cannot calculate coordinates.")
 
 
 def process_images_and_update_db(db_handler, image_comparator):
@@ -188,8 +188,8 @@ def process_images_and_update_db(db_handler, image_comparator):
                     continue
 
                 # Compare images
-                image_path1 = os.path.join("/home/mundax/Projects/Location_tracking/model/data/images/Matching/", f"{id1}.jpg")
-                image_path2 = os.path.join("/home/mundax/Projects/Location_tracking/model/data/images/Matching/", f"{id2}.jpg")
+                image_path1 = os.path.join(r"D:\Jupyter\Road_Object_Detection\Captured", f"{id1}.jpg")
+                image_path2 = os.path.join(r"D:\Jupyter\Road_Object_Detection\Captured", f"{id2}.jpg")
 
                 if image_comparator.compare_images(image_path1, image_path2):
                     print(f"Images {id1} and {id2} are similar. Processing...")
@@ -217,7 +217,7 @@ def process_images_and_update_db(db_handler, image_comparator):
     print("Processing completed.")
 
 if __name__ == "__main__":
-    db_path = '/home/mundax/SQLite/My_Database.db'
+    db_path = r"D:\Jupyter\Road_Object_Detection\SQLite\My_Database.db"
     
     db_handler = DatabaseHandler(db_path)
     

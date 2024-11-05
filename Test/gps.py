@@ -2,9 +2,14 @@ import serial
 import pynmea2
 import cv2
 from datetime import datetime
+import os
+import time
+import threading
+import sqlite3
 
 # GPS configuration
-serial_port = '/dev/ttyUSB0'  # Adjust based on your system
+# serial_port = '/dev/ttyUSB0'  # Adjust based on your system
+serial_port = 'COM3'
 baud_rate = 9600  # Typical baud rate for GPS modules
 
 def get_gps_data():
@@ -29,50 +34,110 @@ def get_gps_data():
         print(f"Serial error: {e}")
     return None, None
 
-def capture_images(camera1_id=0, camera2_id=1):
+def get_latest_row_id(db_path):
     """
-    Captures images from two cameras.
+    Fetches the latest row ID from the 'location' table in the SQLite database.
 
     Parameters:
-        camera1_id (int): ID of the first camera.
-        camera2_id (int): ID of the second camera.
+        db_path (str): Path to the SQLite database file.
 
     Returns:
-        tuple: (frame1, frame2) captured from camera 1 and camera 2, respectively.
+        int: Latest row ID from the 'location' table.
     """
-    cam1 = cv2.VideoCapture(camera1_id)
-    cam2 = cv2.VideoCapture(camera2_id)
-    
-    if not cam1.isOpened() or not cam2.isOpened():
-        print("Error: One or both cameras could not be opened.")
-        return None, None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM location ORDER BY id DESC LIMIT 1")
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else 0
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        return 0
 
-    ret1, frame1 = cam1.read()
-    ret2, frame2 = cam2.read()
-    
-    cam1.release()
-    cam2.release()
+def capture_frames(cap, frames):
+    while True:
+        ret, frame = cap.read()
+        if ret:
+            frames.append(frame)
+        else:
+            break
 
-    if ret1 and ret2:
-        return frame1, frame2
-    else:
-        print("Error: Could not capture frames from one or both cameras.")
-        return None, None
-
-def save_images(frame1, frame2):
+def capture_images(camera_index1=1, camera_index2=2):
     """
-    Saves images from two frames with a timestamp.
+    Captures images from two cameras and saves them.
 
     Parameters:
-        frame1 (numpy.ndarray): Image from camera 1.
-        frame2 (numpy.ndarray): Image from camera 2.
+        camera_index1 (int): ID of the first camera.
+        camera_index2 (int): ID of the second camera.
 
     Returns:
-        tuple: File paths of saved images.
+        tuple: File paths of the saved images from camera 1 and camera 2.
     """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    img1_path = f"camera1_{timestamp}.jpg"
-    img2_path = f"camera2_{timestamp}.jpg"
-    cv2.imwrite(img1_path, frame1)
-    cv2.imwrite(img2_path, frame2)
-    return img1_path, img2_path
+    camera_indices = (camera_index1, camera_index2)
+    caps = []
+    threads = []
+    frames = [[] for _ in camera_indices]  # List of lists to store frames for each camera
+    
+    # Specify the directory to save images
+    save_dir = r"D:\Jupyter\Road_Object_Detection\Captured"
+    db_path = r"D:\Jupyter\Road_Object_Detection\SQLite\My_Database.db"
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Open the specified cameras
+    for index in camera_indices:
+        cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+        if cap.isOpened():
+            print(f"Camera found at index {index}")
+            caps.append(cap)
+            # Start a new thread for capturing frames
+            thread = threading.Thread(target=capture_frames, args=(cap, frames[len(caps) - 1]))
+            thread.start()
+            threads.append(thread)
+        else:
+            print(f"No camera at index {index}")
+
+    # Check if at least one camera is available
+    if not caps:
+        print("No cameras to display.")
+        return None, None
+
+    # Display video feed from the cameras briefly
+    display_duration = 2  # Display duration in seconds
+    start_time = time.time()
+    while time.time() - start_time < display_duration:
+        if len(frames) > 0:
+            # Check if we have frames from all cameras
+            combined_frames = [f for f in frames if len(f) > 0 and f[-1] is not None]  # Only take non-empty frames
+            if len(combined_frames) > 0:
+                # Show each frame individually
+                for i, frame in enumerate(combined_frames):
+                    if len(frame) > 0:  # Ensure there is at least one frame
+                        cv2.imshow(f"Camera Feed {camera_indices[i]}", frame[-1])  # Show the latest frame
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    # Capture and save one image from each camera
+    image_paths = []  # To store the paths of saved images
+    latest_row_id = get_latest_row_id(db_path) + 1  # Fetch the latest row ID and increment it
+
+    for i, frame in enumerate(frames):
+        if len(frame) > 0:  # Ensure there is at least one frame
+            # Save the frame as an image with an incremented ID for each camera
+            image_filename = os.path.join(save_dir, f"{latest_row_id + i}.jpg")
+            try:
+                cv2.imwrite(image_filename, frame[-1])  # Save the last captured frame
+                print(f"Captured and saved image from camera {camera_indices[i]} as {image_filename}.")
+                image_paths.append(image_filename)  # Store the image path
+            except Exception as e:
+                print(f"Failed to save image from camera {camera_indices[i]}: {e}")
+
+    # Release the cameras and close windows
+    for cap in caps:
+        cap.release()
+    cv2.destroyAllWindows()
+    
+    # Ensure we return paths for both images
+    return (image_paths[0] if len(image_paths) > 0 else None, 
+            image_paths[1] if len(image_paths) > 1 else None)

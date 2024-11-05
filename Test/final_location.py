@@ -76,7 +76,7 @@ class LocationCalculator:
     @staticmethod
     def calculate_bearing(camera_orientation, image_width, object_position):
         """Calculate the bearing using the camera orientation and object position in the image."""
-        camera_fov = 90  # Camera field of view (degrees)
+        camera_fov = 55  # Camera field of view (degrees)
         center_x = image_width / 2 
         distance_from_center = object_position - center_x  # Object's horizontal offset from image center
         max_angle = camera_fov / 2  # Maximum angle the camera can capture
@@ -188,13 +188,13 @@ class LocationEstimator:
         self.db_handler.close()
 
 if __name__ == "__main__":
-    db_path = '/home/mundax/SQLite/My_Database.db'
-    model_path = '/home/mundax/Projects/Location_tracking/model/yolov11m_new_saved.pt'
-    folder_path = '/home/mundax/Projects/Location_tracking/model/data/images/Matching/'
+    db_path = r"D:\Jupyter\Road_Object_Detection\SQLite\My_Database.db"
+    model_path = r"D:\Jupyter\Road_Object_Detection\yolov11m_new_saved.pt"
+    folder_path = r"D:\Jupyter\Road_Object_Detection\Captured"
     
     image_paths = [
-        '/home/mundax/Projects/Location_tracking/model/data/images/Matching/1.jpg',
-        '/home/mundax/Projects/Location_tracking/model/data/images/Matching/4.jpg'
+        r"D:\Jupyter\Road_Object_Detection\NEW_Captured\1.jpg",
+        r"D:\Jupyter\Road_Object_Detection\NEW_Captured\2.jpg"
     ]
     
     camera_orientations = [45, 90]  # Example camera orientations for the two images
