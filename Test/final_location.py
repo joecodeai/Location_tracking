@@ -188,13 +188,13 @@ class LocationEstimator:
         self.db_handler.close()
 
 if __name__ == "__main__":
-    db_path = r"D:\Jupyter\Road_Object_Detection\SQLite\My_Database.db"
-    model_path = r"D:\Jupyter\Road_Object_Detection\yolov11m_new_saved.pt"
-    folder_path = r"D:\Jupyter\Road_Object_Detection\Captured"
+    db_path = '/home/mundax/SQLite/My_Database.db'
+    model_path = '/home/mundax/Projects/Location_tracking/model/yolov11m_new_saved.pt'
+    folder_path = '/home/mundax/Projects/Location_tracking/Captured'
     
     image_paths = [
-        r"D:\Jupyter\Road_Object_Detection\NEW_Captured\1.jpg",
-        r"D:\Jupyter\Road_Object_Detection\NEW_Captured\2.jpg"
+        '/home/mundax/Projects/Location_tracking/New_Captured/1.jpg',
+        '/home/mundax/Projects/Location_tracking/New_Captured/2.jpg'
     ]
     
     camera_orientations = [45, 90]  # Example camera orientations for the two images

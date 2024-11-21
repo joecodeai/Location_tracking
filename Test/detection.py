@@ -211,8 +211,8 @@ class MainApp:
 if __name__ == "__main__":
     # Initialize the MainApp with the YOLO model path and database path
     app = MainApp(
-        model_path=r"D:\Jupyter\Road_Object_Detection\yolov11m_new_saved.pt",
-        db_path=r"D:\Jupyter\Road_Object_Detection\SQLite\My_Database.db"
+        model_path='/home/mundax/Projects/Location_tracking/model/yolov11m_new_saved.pt',
+        db_path='/home/mundax/SQLite/My_Database.db'
     )
 
     # Get GPS data

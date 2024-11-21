@@ -2,19 +2,24 @@ import cv2
 import numpy as np
 import sqlite3
 import os
+import torch
+import open_clip
+from PIL import Image
 
 class ImageComparator:
     """
-    Compares two images using SIFT feature matching to determine similarity.
+    Compares two images using CLIP embeddings to determine similarity.
     """
-    def __init__(self):
-        self.sift = cv2.SIFT_create(nfeatures=1000)
-        self.bf = cv2.BFMatcher(cv2.NORM_L2)  # Use L2 norm for SIFT
+    def __init__(self, device="cpu"):
+        # Load OpenCLIP model and tokenizer
+        self.device = device
+        self.clip_model, _, self.preprocess = open_clip.create_model_and_transforms('ViT-B/32-quickgelu', pretrained='openai')
+        self.clip_model.to(self.device)
 
     def compare_images(self, image_path1, image_path2):
         """
-        Compares two images and returns True if they are similar enough.
-        
+        Compares two images and returns True if they are similar enough using CLIP.
+
         Parameters:
             image_path1 (str): Path to the first image.
             image_path2 (str): Path to the second image.
@@ -22,33 +27,48 @@ class ImageComparator:
         Returns:
             bool: True if the images are similar, False otherwise.
         """
-        # Read the two images in grayscale
-        img1 = cv2.imread(image_path1, cv2.IMREAD_GRAYSCALE)
-        img2 = cv2.imread(image_path2, cv2.IMREAD_GRAYSCALE)
+        # Load and preprocess the images
+        image1 = self._load_and_preprocess_image(image_path1)
+        image2 = self._load_and_preprocess_image(image_path2)
 
-        # Check if images are loaded
-        if img1 is None or img2 is None:
-            raise FileNotFoundError("One or both image files not found.")
+        # Get the CLIP embeddings for the images
+        embedding1 = self._get_clip_embedding(image1)
+        embedding2 = self._get_clip_embedding(image2)
 
-        # Detect SIFT keypoints and descriptors
-        kp1, des1 = self.sift.detectAndCompute(img1, None)
-        kp2, des2 = self.sift.detectAndCompute(img2, None)
+        # Compute cosine similarity
+        similarity_score = torch.nn.functional.cosine_similarity(embedding1, embedding2).item()
 
-        # If descriptors cannot be computed, return False
-        if des1 is None or des2 is None:
-            return False
+        # Similarity threshold, you can adjust based on experimentation
+        similarity_threshold = 0.8  # Adjust this value as needed
 
-        # Use BFMatcher with correct data type check
-        matches = self.bf.knnMatch(des1, des2, k=2)
+        return similarity_score > similarity_threshold
 
-        # Apply the ratio test to filter out poor matches
-        good_matches = [m for m, n in matches if m.distance < 0.75 * n.distance]
+    def _load_and_preprocess_image(self, image_path):
+        """
+        Loads and preprocesses an image for CLIP.
 
-        # Set a minimum number of good matches to consider images as similar
-        similarity_threshold = 20  # Adjust based on experimentation
-        are_similar = len(good_matches) > similarity_threshold
+        Parameters:
+            image_path (str): Path to the image to preprocess.
 
-        return are_similar
+        Returns:
+            torch.Tensor: Preprocessed image tensor.
+        """
+        image_cv2 = cv2.imread(image_path)
+        image_pil = Image.fromarray(cv2.cvtColor(image_cv2, cv2.COLOR_BGR2RGB))
+        return self.preprocess(image_pil).unsqueeze(0).to(self.device)
+
+    def _get_clip_embedding(self, image):
+        """
+        Extracts CLIP embedding for an image.
+
+        Parameters:
+            image (torch.Tensor): Preprocessed image tensor.
+
+        Returns:
+            torch.Tensor: Image embedding.
+        """
+        with torch.no_grad():
+            return self.clip_model.encode_image(image).cpu()
 
 
 class DatabaseHandler:
@@ -217,7 +237,7 @@ def process_images_and_update_db(db_handler, image_comparator):
     print("Processing completed.")
 
 if __name__ == "__main__":
-    db_path = r"D:\Jupyter\Road_Object_Detection\SQLite\My_Database.db"
+    db_path = '/home/mundax/SQLite/My_Database.db'
     
     db_handler = DatabaseHandler(db_path)
     

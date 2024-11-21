@@ -8,8 +8,7 @@ import threading
 import sqlite3
 
 # GPS configuration
-# serial_port = '/dev/ttyUSB0'  # Adjust based on your system
-serial_port = 'COM3'
+serial_port = '/dev/ttyUSB0'
 baud_rate = 9600  # Typical baud rate for GPS modules
 
 def get_gps_data():
@@ -80,8 +79,8 @@ def capture_images(camera_index1=1, camera_index2=2):
     frames = [[] for _ in camera_indices]  # List of lists to store frames for each camera
     
     # Specify the directory to save images
-    save_dir = r"D:\Jupyter\Road_Object_Detection\Captured"
-    db_path = r"D:\Jupyter\Road_Object_Detection\SQLite\My_Database.db"
+    save_dir = '/home/mundax/Projects/Location_tracking/Captured'
+    db_path = '/home/mundax/SQLite/My_Database.db'
     os.makedirs(save_dir, exist_ok=True)
 
     # Open the specified cameras
