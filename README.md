@@ -1,7 +1,7 @@
 # Location_tracking
 # Image Matching and Location Estimation with YOLO and CLIP
 
-This project provides a robust system for **image matching** and **location estimation** using object detection and camera orientation. The system utilizes **YOLO-based object detection**, **OpenAI's CLIP model** for image feature extraction, and **SQLite** for storing object coordinates and metadata. The overall goal is to estimate the location of an object based on images captured from two cameras and their respective orientations.
+This project provides a robust system for **image matching** and **location estimation** using object detection and camera orientation. The system utilizes **YOLO-based object detection**, **OpenAI's CLIP model** for image feature extraction, and **SQLite** for storing object coordinates and metadata. The overall goal is to estimate the location of an object based on images captured from two cameras and their respective orientations. 
 
 ## Features
 - **Image Matching**: Find the most similar image from a folder using CLIP-based feature extraction.
@@ -55,8 +55,6 @@ Run the Location Estimation:
 
     You can now run the location estimation script. Replace the image_paths with your own images, and adjust the camera_orientations according to the orientations of your cameras.
 
-from location_estimator import LocationEstimator
-
 # Define paths to images, database, and model
 db_path = '/path/to/your/database.db'
 model_path = '/path/to/your/yolov11m.pt'
@@ -69,27 +67,17 @@ image_paths = [
 
 camera_orientations = [45, 90]  # Example orientations for the cameras
 
-# Initialize the estimator and estimate location
-estimator = LocationEstimator(db_path, model_path, folder_path)
-estimator.estimate_location(image_paths, camera_orientations)
-estimator.close()
+# Estimate location
+
 
 Image Matching:
 
-    Use the ImageMatcher class to find the most similar image from a folder:
+    Use OpenClip to find the most similar images from a folder:
 
-from image_matcher import ImageMatcher
 
 folder_path = '/path/to/your/image/folder'
 image_path = '/path/to/query/image.jpg'
 
-matcher = ImageMatcher(folder_path)
-best_match, similarity = matcher.find_best_match_or_alternate(image_path)
-
-if best_match != 'No Match Found':
-    print(f"Most similar image: {best_match} with similarity score: {similarity}")
-else:
-    print(best_match)
 
 Test the System:
 
