@@ -4,16 +4,38 @@ import os
 import numpy as np
 from ultralytics import YOLO
 from math import radians, degrees
+import logging
+
+# Configure logging for better traceability and debugging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 class ImageMatcher:
+    """Finds the most similar image in a folder using ORB feature matching."""
+
     def __init__(self, folder_path):
+        """
+        Initializes the ImageMatcher.
+
+        Parameters:
+            folder_path (str): Path to the folder containing images for comparison.
+        """
         self.folder_path = folder_path
         self.orb = cv2.ORB_create(nfeatures=3000)
 
     def find_most_similar_image(self, image_path):
-        """Find the most similar image from the folder using ORB feature matching."""
+        """
+        Finds the most similar image from the folder using ORB feature matching.
+
+        Parameters:
+            image_path (str): Path to the image to compare.
+
+        Returns:
+            str: Filename of the most similar image, or None if no match is found.
+        """
         new_img = cv2.imread(image_path)
         if new_img is None:
+            logging.error(f"Image not found: {image_path}")
             return None
         
         keypoints1, descriptors1 = self.orb.detectAndCompute(new_img, None)
@@ -38,13 +60,35 @@ class ImageMatcher:
 
         return best_match_file
 
+
 class DatabaseHandler:
+    """Handles SQLite database interactions."""
+
     def __init__(self, db_path):
-        self.conn = sqlite3.connect(db_path)
-        self.cursor = self.conn.cursor()
+        """
+        Initializes the DatabaseHandler by connecting to the SQLite database.
+
+        Parameters:
+            db_path (str): Path to the SQLite database file.
+        """
+        try:
+            self.conn = sqlite3.connect(db_path)
+            self.cursor = self.conn.cursor()
+            logging.info(f"Connected to database: {db_path}")
+        except sqlite3.Error as e:
+            logging.error(f"Database connection error: {e}")
+            raise
 
     def get_object_coordinates(self, primary_key_id):
-        """Retrieve object coordinates from the database for a specific id."""
+        """
+        Retrieves object coordinates (latitude and longitude) from the database for a given ID.
+
+        Parameters:
+            primary_key_id (str): The primary key (image ID) to query.
+
+        Returns:
+            tuple: Latitude and longitude of the object, or None if not found.
+        """
         self.cursor.execute('''
             SELECT obj1_latitude, obj1_longitude 
             FROM location 
@@ -53,15 +97,36 @@ class DatabaseHandler:
         return self.cursor.fetchone()
 
     def close(self):
-        """Close the database connection."""
-        self.conn.close()
+        """Closes the database connection."""
+        try:
+            self.conn.close()
+            logging.info("Database connection closed.")
+        except sqlite3.Error as e:
+            logging.error(f"Error closing database: {e}")
+
 
 class ObjectDetector:
+    """Runs YOLO object detection on images."""
+
     def __init__(self, model_path):
+        """
+        Initializes the ObjectDetector with a YOLO model.
+
+        Parameters:
+            model_path (str): Path to the YOLO model.
+        """
         self.model = YOLO(model_path)
 
     def run_yolo_model(self, image_path):
-        """Run YOLO object detection on the given image."""
+        """
+        Runs the YOLO model on the image to detect objects.
+
+        Parameters:
+            image_path (str): Path to the image to process.
+
+        Returns:
+            list: List of detected bounding boxes (x1, y1, x2, y2) or an empty list if no objects detected.
+        """
         results = self.model(image_path)
         detections = []
         if results:
@@ -72,19 +137,32 @@ class ObjectDetector:
                     detections.append((x1, y1, x2, y2))
         return detections
 
+
 class LocationCalculator:
+    """Calculates object location based on camera orientations and detected positions."""
+
+    CAMERA_FOV = 55  # Camera field of view (degrees)
+
     @staticmethod
     def calculate_bearing(camera_orientation, image_width, object_position):
-        """Calculate the bearing using the camera orientation and object position in the image."""
-        camera_fov = 55  # Camera field of view (degrees)
-        center_x = image_width / 2 
-        distance_from_center = object_position - center_x  # Object's horizontal offset from image center
-        max_angle = camera_fov / 2  # Maximum angle the camera can capture
-        max_distance = image_width / 2  # Maximum pixel distance from center to edge
+        """
+        Calculates the bearing (angle) based on the object position in the image.
 
-        # Calculate the angle offset of the object relative to the camera's center
+        Parameters:
+            camera_orientation (float): Camera orientation angle (in degrees).
+            image_width (int): Width of the image in pixels.
+            object_position (int): Horizontal position of the detected object in the image.
+
+        Returns:
+            float: Calculated bearing angle (in degrees).
+        """
+        center_x = image_width / 2 
+        distance_from_center = object_position - center_x  # Horizontal offset
+        max_angle = LocationCalculator.CAMERA_FOV / 2  # Maximum angle captured by the camera
+        max_distance = image_width / 2  # Max pixel distance from center to edge
+
+        # Calculate the angle offset from the center of the image
         angle_offset = (distance_from_center / max_distance) * max_angle
-        # The total bearing is the camera's orientation plus the offset
         total_bearing = camera_orientation + angle_offset
 
         return total_bearing
@@ -92,109 +170,128 @@ class LocationCalculator:
     @staticmethod
     def find_intersection(lat1, lon1, bearing1, lat2, lon2, bearing2):
         """
-        Triangulate to find the intersection of two bearings (from two known points) on a plane.
-        
+        Triangulates the intersection of two bearings to estimate an object's location.
+
         Parameters:
-            lat1, lon1 (float): Latitude and longitude of the first camera.
-            bearing1 (float): Bearing (angle) from the first camera.
-            lat2, lon2 (float): Latitude and longitude of the second camera.
-            bearing2 (float): Bearing (angle) from the second camera.
+            lat1, lon1 (float): Coordinates of the first camera.
+            bearing1 (float): Bearing from the first camera.
+            lat2, lon2 (float): Coordinates of the second camera.
+            bearing2 (float): Bearing from the second camera.
 
         Returns:
-            tuple: Estimated location (latitude, longitude) of the camera.
+            tuple: Estimated object location (latitude, longitude).
         """
-        # Convert degrees to radians
-        lat1_rad = radians(lat1)
-        lon1_rad = radians(lon1)
-        lat2_rad = radians(lat2)
-        lon2_rad = radians(lon2)
-        bearing1_rad = radians(bearing1)
-        bearing2_rad = radians(bearing2)
+        try:
+            # Convert degrees to radians
+            lat1_rad = radians(lat1)
+            lon1_rad = radians(lon1)
+            lat2_rad = radians(lat2)
+            lon2_rad = radians(lon2)
+            bearing1_rad = radians(bearing1)
+            bearing2_rad = radians(bearing2)
 
-        # Use the slope of the bearings to set up a system of equations
-        slope1 = np.tan(bearing1_rad)
-        slope2 = np.tan(bearing2_rad)
+            # Calculate slopes of the bearings
+            slope1 = np.tan(bearing1_rad)
+            slope2 = np.tan(bearing2_rad)
 
-        # The equations of the lines in slope-intercept form
-        intercept1 = lat1_rad - slope1 * lon1_rad
+            intercept1 = lat1_rad - slope1 * lon1_rad
+            intercept2 = lat2_rad - slope2 * lon2_rad
 
-        # For object 2
-        intercept2 = lat2_rad - slope2 * lon2_rad
+            # Solve the system of equations to find the intersection
+            x_long = (intercept2 - intercept1) / (slope1 - slope2)
+            y_lat = slope1 * x_long + intercept1
 
-        # Set the two equations equal to find x (longitude)
-        x_long = (intercept2 - intercept1) / (slope1 - slope2)
+            # Convert the result back to degrees
+            lat_deg = degrees(y_lat)
+            lon_deg = degrees(x_long)
 
-        # Now substitute x back into one of the original equations to find y (latitude)
-        y_lat = slope1 * x_long + intercept1
+            return lat_deg, lon_deg
+        except Exception as e:
+            logging.error(f"Error calculating intersection: {e}")
+            raise
 
-        # Convert back to degrees
-        lat_deg = degrees(y_lat)
-        lon_deg = degrees(x_long)
-
-        return lat_deg, lon_deg
 
 class LocationEstimator:
+    """Estimates the location of an object based on two images and their camera orientations."""
+
     def __init__(self, db_path, model_path, folder_path):
+        """
+        Initializes the LocationEstimator.
+
+        Parameters:
+            db_path (str): Path to the SQLite database.
+            model_path (str): Path to the YOLO model.
+            folder_path (str): Path to the folder containing images for matching.
+        """
         self.db_handler = DatabaseHandler(db_path)
         self.detector = ObjectDetector(model_path)
         self.matcher = ImageMatcher(folder_path)
         self.calculator = LocationCalculator()
 
     def estimate_location(self, image_paths, camera_orientations):
-        """Estimate the exact location using two images and camera orientations."""
+        """
+        Estimates the object's location based on two images and camera orientations.
+
+        Parameters:
+            image_paths (list): List of two image paths to compare.
+            camera_orientations (list): List of two camera orientations (in degrees).
+        """
         image_data = []
 
         for idx, image_path in enumerate(image_paths):
             best_match_filename = self.matcher.find_most_similar_image(image_path)
             
             if not best_match_filename:
-                print(f"Skipping {image_path}: No matching image found.")
+                logging.warning(f"Skipping {image_path}: No matching image found.")
                 continue
             
             primary_key_id = os.path.splitext(best_match_filename)[0]
             detections = self.detector.run_yolo_model(image_path)
             
             if not detections:
-                print(f"Skipping {image_path}: No objects detected.")
+                logging.warning(f"Skipping {image_path}: No objects detected.")
                 continue
             
             coordinates = self.db_handler.get_object_coordinates(primary_key_id)
             
             if not coordinates:
-                print(f"No coordinates found for primary key id {primary_key_id}.")
+                logging.warning(f"No coordinates found for primary key id {primary_key_id}.")
                 continue
             
             image_data.append((coordinates, detections))
 
         if len(image_data) != 2:
-            print("Error: Need data from 2 images for calculations.")
+            logging.error("Error: Need data from exactly 2 images for calculations.")
             return
         
         lat1, lon1 = image_data[0][0]
         lat2, lon2 = image_data[1][0]
 
-        image_width = 640  
-        object_position1 = image_data[0][1][0][0]
-        object_position2 = image_data[1][1][0][0]
+        image_width = 640  # Example image width
+        object_position1 = image_data[0][1][0][0]  # Horizontal position of object in first image
+        object_position2 = image_data[1][1][0][0]  # Horizontal position of object in second image
 
         bearing1 = self.calculator.calculate_bearing(camera_orientations[0], image_width, object_position1)
         bearing2 = self.calculator.calculate_bearing(camera_orientations[1], image_width, object_position2)
 
         intersection_lat, intersection_lon = self.calculator.find_intersection(lat1, lon1, bearing1, lat2, lon2, bearing2)
 
-        print(f"Calculated Intersection Location: Latitude = {intersection_lat}, Longitude = {intersection_lon}")
+        logging.info(f"Calculated Intersection Location: Latitude = {intersection_lat}, Longitude = {intersection_lon}")
 
     def close(self):
+        """Closes the database connection."""
         self.db_handler.close()
 
+
 if __name__ == "__main__":
-    db_path = '/home/mundax/SQLite/My_Database.db'
-    model_path = '/home/mundax/Projects/Location_tracking/model/yolov11m_new_saved.pt'
-    folder_path = '/home/mundax/Projects/Location_tracking/Captured'
-    
+    directory = os.getcwd()
+    db_path = os.path.join(directory,"My_Database.db")
+    model_path = os.path.join(directory,"model/yolov11m_new_saved.pt")
+    folder_path = os.path.join(directory,"Captured")
+
     image_paths = [
-        '/home/mundax/Projects/Location_tracking/New_Captured/1.jpg',
-        '/home/mundax/Projects/Location_tracking/New_Captured/2.jpg'
+        os.path.join(directory,"New_Captured/1.jpg"),
+        os.path.join(directory,"New_Captured/2.jpg")
     ]
     
     camera_orientations = [45, 90]  # Example camera orientations for the two images
