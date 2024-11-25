@@ -17,7 +17,13 @@ This project provides a robust system for **image matching** and **location esti
 
 ## Project Structure
 
-/Image_Matching_Location_Estimation ├── /Captured # Folder containing images for matching ├── /New_Captured # New images to process ├── /model # YOLO model for object detection ├── bearing.py # Location and bearing calculation logic ├── object_detector.py # YOLO object detection logic ├── image_matcher.py # CLIP-based image matching logic ├── database_handler.py # Database interaction logic (SQLite) ├── location_estimator.py # High-level location estimation logic ├── requirements.txt # Python dependencies └── README.md # Project documentation
+requirements.txt # Python dependencies
+/model # YOLO model for object detection
+/Test/detection # Runs the model on images taken
+/Test/object_location # Finds the location of the objects in the images taken
+/Test/final_location # Finds our location based on new images taken and comparing with our database
+/Captured # Folder containing images taken
+/New_Captured # New images to process
 
 
 ## Requirements
@@ -34,10 +40,7 @@ pip install -r requirements.txt
 
 Setup and Usage
 
-    Clone the repository:
-
-git clone https://github.com/your-username/Image_Matching_Location_Estimation.git
-cd Image_Matching_Location_Estimation
+    Clone the repository.
 
 Download the YOLO model:
 
@@ -63,6 +66,7 @@ image_paths = [
     '/path/to/image1.jpg',
     '/path/to/image2.jpg'
 ]
+
 camera_orientations = [45, 90]  # Example orientations for the cameras
 
 # Initialize the estimator and estimate location
