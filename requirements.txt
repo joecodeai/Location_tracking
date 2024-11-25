@@ -9,3 +9,8 @@ torchvision
 ultralytics
 albumentations
 sqlite3
+torch
+open_clip_torch
+Pillow
+pyserial
+pynmea2
